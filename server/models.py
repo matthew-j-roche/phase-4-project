@@ -1,20 +1,24 @@
 from sqlalchemy_serializer import SerializerMixin
 from config import db
-# from werkzeug.security
-# import generate_password_hash, check_password_hash
-# from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+from flask_bcrypt import Bcrypt
 
-# db = SQLAlchemy()
+bcrypt = Bcrypt()
 
 class User(db.Model, SerializerMixin):
     id = db.Column(db.Integer, primary_key=True)
     __tablename__ = 'users'
     username = db.Column(db.String(255))
-    # role = db.Column(db.String(255))
     password = db.Column(db.String(255))
     email = db.Column(db.String(255))
-    created_at = db.Column(db.TIMESTAMP)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Set default value to current timestamp
     tasks = db.relationship('Task', backref='user', lazy=True)
+
+    def set_password(self, password):
+        self.password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+    def check_password(self, password):
+        return bcrypt.check_password_hash(self.password, password)
 
 class Task(db.Model, SerializerMixin):
     __tablename__ = 'tasks'
@@ -32,7 +36,3 @@ class Todo(db.Model, SerializerMixin):
     description = db.Column(db.Text)
     task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False)
     created_at = db.Column(db.TIMESTAMP)
-
-
-# !!--NOTE--!
-# !The User model has a one-to-many relationship with the Task model, where a user can have multiple tasks. The tasks attribute in the User model represents this relationship. In this case, the lazy=True setting indicates that the related Task objects will be loaded lazily (on-demand) when accessed through the tasks attribute. It means that the associated tasks for a user will be loaded from the database only when you access the tasks attribute of a User object. 

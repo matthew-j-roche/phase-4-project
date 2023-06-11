@@ -1,21 +1,19 @@
-#!/usr/bin/env python3
-# Remote library imports
-from flask import Flask, jsonify, request, make_response
-from flask_restful import Resource
-# Local imports
-from config import app, db, api
-from models import User
-
-from flask import Flask, jsonify, request, make_response
-from flask_migrate import Migrate
+from flask import Flask, jsonify, request, make_response, session
 from flask_restful import Api, Resource
+from flask_migrate import Migrate
+from flask_bcrypt import Bcrypt
+from config import app, db
+from models import User, Task, Todo
+from datetime import datetime
 
-from models import db, User, Task, Todo
-# !---------------------------------------------------------------------!
+migrate = Migrate(app, db)
+api = Api(app)
+bcrypt = Bcrypt(app)
+
 
 @app.route('/')
 def index():
-    return '<h1>Code challenge</h1>'
+    return '<h1>Welcome to Taskier!</h1>'
 
 
 class Users(Resource):
@@ -29,23 +27,18 @@ class Users(Resource):
         if not data:
             return make_response(jsonify({'error': 'Invalid request data'}), 400)
 
-        user = User(**data)
+        password = data.get('password')
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+        user = User(username=data.get('username'), password=hashed_password, email=data.get('email'))
+        user.created_at = datetime.now()
+
         db.session.add(user)
         db.session.commit()
 
         session['user_id'] = user.id
-        response = make_response(new_user.to_dict(), 201)
-
-
+        response = make_response(user.to_dict(), 201)
         return response
-
-        # new_user = User(
-        #     name = form_json['name'],
-        #     email = form_json['email'],
-        #     password = form_json['password']
-        # )
-
-        # return make_response(jsonify({'message': 'User created successfully'}), 201)
 
 
 class UserById(Resource):
@@ -186,12 +179,60 @@ class TodoById(Resource):
         return make_response(jsonify({'message': 'Todo deleted successfully'}), 200)
 
 
+class Signup(Resource):
+    def post(self):
+        data = request.get_json()
+        if not data:
+            return make_response(jsonify({'error': 'Invalid request data'}), 400)
+
+        password = data.get('password')
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+        user = User(username=data.get('username'), password=hashed_password, email=data.get('email'))
+        user.created_at = datetime.now()
+
+        db.session.add(user)
+        db.session.commit()
+
+        session['user_id'] = user.id
+
+        return make_response(jsonify({'message': 'User created successfully'}), 201)
+
+
+# Login endpoint
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not data:
+        return make_response(jsonify({'error': 'Invalid request data'}), 400)
+
+    username = data.get('username')
+    password = data.get('password')
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user or not bcrypt.check_password_hash(user.password, password):
+        return make_response(jsonify({'error': 'Invalid username or password'}), 401)
+
+    session['user_id'] = user.id
+
+    return make_response(jsonify({'message': 'Logged in successfully'}), 200)
+
+
+# Logout endpoint
+@app.route('/logout', methods=['POST'])
+def logout():
+    session.pop('user_id', None)  # Remove user ID from the session
+    return make_response(jsonify({'message': 'Logged out successfully'}), 200)
+
+
 api.add_resource(Users, '/users')
 api.add_resource(UserById, '/users/<int:id>')
 api.add_resource(Tasks, '/tasks')
 api.add_resource(TaskById, '/tasks/<int:id>')
 api.add_resource(Todos, '/todos')
 api.add_resource(TodoById, '/todos/<int:id>')
+api.add_resource(Signup, '/signup')
 
 
 if __name__ == '__main__':
